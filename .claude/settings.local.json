@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv venv:*)",
+      "Bash(source:*)",
+      "Bash(uv pip install:*)",
+      "Bash(python:*)",
+      "Bash(rss-watcher:*)",
+      "Bash(docker build:*)",
+      "Bash(ruff check:*)"
+    ]
+  }
+}

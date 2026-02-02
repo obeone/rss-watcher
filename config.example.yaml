@@ -1,0 +1,101 @@
+# RSS Watcher Configuration Example
+# Copy this file to config.yaml and customize it
+
+# Telegram Bot Configuration
+# Create a bot via @BotFather and get your chat ID via @userinfobot
+telegram:
+  # Bot token from @BotFather (use environment variable for security)
+  bot_token: "${TELEGRAM_BOT_TOKEN}"
+  # Chat ID where notifications will be sent
+  chat_id: "${TELEGRAM_CHAT_ID}"
+  # Message format: HTML or Markdown
+  parse_mode: "HTML"
+  # Disable link previews in messages
+  disable_web_page_preview: false
+
+# Default settings for all feeds
+defaults:
+  # Default interval between feed checks in seconds (5 minutes)
+  check_interval: 300
+  # HTTP request timeout in seconds
+  request_timeout: 30
+  # Maximum retries for failed requests
+  max_retries: 3
+
+# Storage settings
+storage:
+  # Path to SQLite database file
+  database_path: "data/rss_watcher.db"
+
+# RSS/Atom feeds to monitor
+feeds:
+  # Example 1: Simple feed with no filters
+  - name: "Hacker News"
+    url: "https://news.ycombinator.com/rss"
+    check_interval: 600  # Check every 10 minutes (overrides default)
+    enabled: true
+
+  # Example 2: Feed with keyword filters
+  - name: "Tech News"
+    url: "https://example.com/tech-feed.xml"
+    filters:
+      keywords:
+        # Only include entries containing these words (OR logic)
+        include:
+          - "python"
+          - "kubernetes"
+          - "docker"
+        # Exclude entries containing these words
+        exclude:
+          - "sponsor"
+          - "advertisement"
+        # Case-insensitive matching (default)
+        case_sensitive: false
+
+  # Example 3: Feed with category and author filters
+  - name: "Blog Feed"
+    url: "https://example.com/blog/feed"
+    filters:
+      categories:
+        include:
+          - "tutorials"
+          - "guides"
+        exclude:
+          - "offtopic"
+      authors:
+        include:
+          - "john"
+          - "jane"
+
+  # Example 4: Feed with regex filters
+  - name: "Security Alerts"
+    url: "https://example.com/security-feed.xml"
+    check_interval: 180  # Check every 3 minutes for security alerts
+    filters:
+      regex:
+        # Match titles starting with [CRITICAL] or [URGENT]
+        title: "^\\[(CRITICAL|URGENT)\\]"
+      keywords:
+        exclude:
+          - "test"
+          - "drill"
+
+  # Example 5: Combined filters (all filters must pass)
+  - name: "Project Updates"
+    url: "https://github.com/org/project/releases.atom"
+    filters:
+      keywords:
+        include:
+          - "release"
+          - "update"
+        exclude:
+          - "beta"
+          - "alpha"
+          - "rc"
+      regex:
+        title: "v[0-9]+\\.[0-9]+\\.[0-9]+$"  # Match semver releases only
+
+  # Example 6: Disabled feed (won't be checked)
+  - name: "Archived Feed"
+    url: "https://example.com/old-feed.xml"
+    enabled: false

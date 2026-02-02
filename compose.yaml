@@ -1,0 +1,44 @@
+# RSS Watcher Docker Compose Configuration
+
+services:
+  rss-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rss-watcher
+    restart: unless-stopped
+
+    environment:
+      # Telegram Bot credentials (required)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # Optional: timezone
+      - TZ=${TZ:-UTC}
+
+    volumes:
+      # Configuration file
+      - ./config.yaml:/app/config.yaml:ro
+      # Persistent storage for seen entries database
+      - rss-watcher-data:/app/data
+
+    # Optional: enable verbose logging
+    # command: ["-c", "/app/config.yaml", "-v"]
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  rss-watcher-data:
+    name: rss-watcher-data
