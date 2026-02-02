@@ -141,11 +141,14 @@ class DefaultsConfig(BaseModel):
         HTTP request timeout in seconds.
     max_retries : int
         Maximum number of retries for failed requests.
+    proxy : str | None
+        Optional SOCKS proxy URL (e.g., socks5://user:pass@host:port).
     """
 
     check_interval: int = 300
     request_timeout: int = 30
     max_retries: int = 3
+    proxy: str | None = None
 
 
 class StorageConfig(BaseModel):

@@ -10,6 +10,7 @@ from typing import Any
 
 import aiohttp
 import feedparser
+from aiohttp_socks import ProxyConnector
 
 from rss_watcher.config import FeedConfig
 from rss_watcher.filters import RSSEntry
@@ -29,6 +30,7 @@ class FeedParser:
         timeout: int = 30,
         max_retries: int = 3,
         user_agent: str = "RSS-Watcher/1.0",
+        proxy_url: str | None = None,
     ):
         """
         Initialize the feed parser.
@@ -41,10 +43,13 @@ class FeedParser:
             Maximum number of retries for failed requests.
         user_agent : str
             User-Agent header for HTTP requests.
+        proxy_url : str | None
+            Optional SOCKS proxy URL (e.g., socks5://user:pass@host:port).
         """
         self.timeout = timeout
         self.max_retries = max_retries
         self.user_agent = user_agent
+        self.proxy_url = proxy_url
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -52,7 +57,15 @@ class FeedParser:
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             headers = {"User-Agent": self.user_agent}
-            self._session = aiohttp.ClientSession(timeout=timeout, headers=headers)
+
+            connector = None
+            if self.proxy_url:
+                connector = ProxyConnector.from_url(self.proxy_url)
+                logger.debug("Using proxy: %s", self.proxy_url.split("@")[-1])
+
+            self._session = aiohttp.ClientSession(
+                timeout=timeout, headers=headers, connector=connector
+            )
         return self._session
 
     async def fetch_feed(self, feed_config: FeedConfig) -> list[RSSEntry]:

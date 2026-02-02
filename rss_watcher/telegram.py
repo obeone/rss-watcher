@@ -12,6 +12,7 @@ import re
 from telegram import Bot
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
+from telegram.request import HTTPXRequest
 
 from rss_watcher.config import TelegramConfig
 from rss_watcher.filters import RSSEntry
@@ -31,7 +32,7 @@ class TelegramNotifier:
     Includes rate limiting and error handling.
     """
 
-    def __init__(self, config: TelegramConfig):
+    def __init__(self, config: TelegramConfig, proxy_url: str | None = None):
         """
         Initialize the Telegram notifier.
 
@@ -39,9 +40,17 @@ class TelegramNotifier:
         ----------
         config : TelegramConfig
             Telegram configuration with bot token and chat ID.
+        proxy_url : str | None
+            Optional SOCKS proxy URL (e.g., socks5://user:pass@host:port).
         """
         self.config = config
-        self._bot = Bot(token=config.bot_token)
+
+        request = None
+        if proxy_url:
+            request = HTTPXRequest(proxy=proxy_url)
+            logger.debug("Telegram using proxy: %s", proxy_url.split("@")[-1])
+
+        self._bot = Bot(token=config.bot_token, request=request)
         self._rate_limit_delay = 0.5  # Seconds between messages
 
     async def send_entry(self, entry: RSSEntry) -> bool:

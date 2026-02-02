@@ -21,6 +21,10 @@ defaults:
   request_timeout: 30
   # Maximum retries for failed requests
   max_retries: 3
+  # Optional SOCKS proxy for all HTTP requests (RSS feeds and Telegram)
+  # Supports socks4://, socks5://, http:// protocols
+  # Example: socks5://user:pass@proxy.example.com:1080
+  # proxy: "${PROXY_URL:-}"
 
 # Storage settings
 storage:

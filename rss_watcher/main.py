@@ -53,12 +53,17 @@ class RSSWatcher:
         self.storage = Storage(self.config.storage.database_path)
         await self.storage.initialize()
 
+        proxy_url = self.config.defaults.proxy
+        if proxy_url:
+            logger.info("Using proxy: %s", proxy_url.split("@")[-1])
+
         self.parser = FeedParser(
             timeout=self.config.defaults.request_timeout,
             max_retries=self.config.defaults.max_retries,
+            proxy_url=proxy_url,
         )
 
-        self.notifier = TelegramNotifier(self.config.telegram)
+        self.notifier = TelegramNotifier(self.config.telegram, proxy_url=proxy_url)
 
         # Test Telegram connection
         if not await self.notifier.test_connection():
