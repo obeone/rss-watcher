@@ -1,0 +1,53 @@
+telegram:
+  bot_token: "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+  chat_id: "-1001234567890"
+  parse_mode: "HTML"
+  disable_web_page_preview: false
+
+defaults:
+  check_interval: 300
+  request_timeout: 30
+  max_retries: 3
+  proxy: null
+  media_dir: null
+  media_all_entries: false
+
+storage:
+  database_path: "data/test.db"
+
+feeds:
+  - name: "Test Feed"
+    url: "https://example.com/feed.xml"
+    enabled: true
+    filters:
+      keywords:
+        include:
+          - "python"
+          - "programming"
+        exclude:
+          - "spam"
+        case_sensitive: false
+      categories:
+        include:
+          - "Technology"
+        exclude:
+          - "Ads"
+      authors:
+        include: []
+        exclude:
+          - "spammer"
+      regex:
+        title: null
+        content: null
+
+  - name: "Second Feed"
+    url: "https://example.org/rss.xml"
+    check_interval: 600
+    enabled: true
+    cookies:
+      session_id: "abc123"
+    media_dir: "/tmp/media"
+    filters:
+      keywords:
+        include: []
+        exclude: []
