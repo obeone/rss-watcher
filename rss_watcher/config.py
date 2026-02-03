@@ -90,6 +90,8 @@ class FeedConfig(BaseModel):
         Filtering rules for this feed.
     enabled : bool
         Whether this feed is active.
+    cookies : dict[str, str] | None
+        Optional cookies to send with HTTP requests.
     """
 
     name: str
@@ -97,6 +99,7 @@ class FeedConfig(BaseModel):
     check_interval: int | None = None
     filters: FeedFilters = Field(default_factory=FeedFilters)
     enabled: bool = True
+    cookies: dict[str, str] | None = None
 
 
 class TelegramConfig(BaseModel):

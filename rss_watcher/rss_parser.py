@@ -93,13 +93,16 @@ class FeedParser:
         for attempt in range(1, self.max_retries + 1):
             try:
                 logger.debug(
-                    "Fetching feed '%s' (attempt %d/%d)",
+                    "Fetching feed '%s' (attempt %d/%d)%s",
                     feed_config.name,
                     attempt,
                     self.max_retries,
+                    " with cookies" if feed_config.cookies else "",
                 )
 
-                async with session.get(feed_config.url) as response:
+                async with session.get(
+                    feed_config.url, cookies=feed_config.cookies
+                ) as response:
                     response.raise_for_status()
                     content = await response.text()
 

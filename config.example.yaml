@@ -99,7 +99,14 @@ feeds:
       regex:
         title: "v[0-9]+\\.[0-9]+\\.[0-9]+$"  # Match semver releases only
 
-  # Example 6: Disabled feed (won't be checked)
+  # Example 6: Feed with cookies for authenticated access
+  - name: "Private Feed"
+    url: "https://example.com/private-feed.xml"
+    cookies:
+      session_id: "${RSS_SESSION_ID}"
+      auth_token: "some-auth-token"
+
+  # Example 7: Disabled feed (won't be checked)
   - name: "Archived Feed"
     url: "https://example.com/old-feed.xml"
     enabled: false

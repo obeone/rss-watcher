@@ -47,7 +47,7 @@ config.yaml → load_config() → RSSWatcher.start()
 | [config.py](rss_watcher/config.py) | Pydantic models, YAML loading, `${VAR:-default}` substitution |
 | [filters.py](rss_watcher/filters.py) | `RSSEntry` dataclass, `EntryFilter` with AND/OR logic |
 | [storage.py](rss_watcher/storage.py) | Async SQLite via `aiosqlite`, duplicate prevention per feed, feed initialization tracking |
-| [rss_parser.py](rss_watcher/rss_parser.py) | `FeedParser` with `aiohttp`, retry logic, feedparser parsing, SOCKS proxy support |
+| [rss_parser.py](rss_watcher/rss_parser.py) | `FeedParser` with `aiohttp`, retry logic, feedparser parsing, SOCKS proxy support, per-feed cookies |
 | [telegram.py](rss_watcher/telegram.py) | `TelegramNotifier`, rate limiting, HTML/Markdown formatting, SOCKS proxy support |
 
 **Key Design Decisions:**
@@ -58,6 +58,7 @@ config.yaml → load_config() → RSSWatcher.start()
 - **Storage:** Per-feed GUID tracking with UNIQUE constraint prevents duplicates across restarts. Feed initialization state persisted in `feed_state` table.
 - **Concurrency:** Each feed runs as an independent `asyncio.Task` with its own check interval.
 - **Proxy support:** Optional SOCKS proxy (`defaults.proxy`) applies to both RSS fetching (via `aiohttp-socks`) and Telegram API (via `httpx`).
+- **Cookies:** Per-feed cookies can be configured for authenticated RSS feeds requiring session or auth tokens.
 
 <claude-mem-context>
 # Recent Activity
