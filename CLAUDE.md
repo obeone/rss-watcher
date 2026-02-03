@@ -13,7 +13,7 @@ uv pip install -e ".[dev]"
 rss-watcher -c config.yaml
 rss-watcher -c config.yaml -v  # verbose mode
 
-# Run tests
+# Run tests (pytest-asyncio handles async tests)
 pytest
 pytest tests/test_filters.py -v  # single test file
 pytest -k "test_keyword"         # run tests matching pattern
@@ -21,6 +21,32 @@ pytest -k "test_keyword"         # run tests matching pattern
 # Code quality
 ruff check .
 ruff format .
+
+# Docker
+docker build -t rss-watcher .
+docker compose up -d             # start service
+docker compose logs -f           # follow logs
+```
+
+## Commit Conventions
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```text
+<type>(scope): <description>
+```
+
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`
+
+**Scopes for this project:** `rss`, `telegram`, `config`, `storage`, `filters`, `deps`
+
+**Examples:**
+
+```text
+feat(rss): add per-feed cookie support for authenticated feeds
+fix(telegram): handle rate limit errors gracefully
+docs: update configuration examples in README
+chore(deps): update aiohttp to 3.9.1
 ```
 
 ## Architecture Overview
