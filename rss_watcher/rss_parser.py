@@ -100,9 +100,7 @@ class FeedParser:
                     " with cookies" if feed_config.cookies else "",
                 )
 
-                async with session.get(
-                    feed_config.url, cookies=feed_config.cookies
-                ) as response:
+                async with session.get(feed_config.url, cookies=feed_config.cookies) as response:
                     response.raise_for_status()
                     content = await response.text()
 

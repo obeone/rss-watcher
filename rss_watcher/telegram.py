@@ -142,7 +142,7 @@ class TelegramNotifier:
         # Title with link
         title = html.escape(entry.title) if entry.title else "No title"
         if entry.link:
-            parts.append(f"\n<b><a href=\"{html.escape(entry.link)}\">{title}</a></b>")
+            parts.append(f'\n<b><a href="{html.escape(entry.link)}">{title}</a></b>')
         else:
             parts.append(f"\n<b>{title}</b>")
 
@@ -273,9 +273,7 @@ class TelegramNotifier:
         TelegramError
             If the message could not be sent.
         """
-        parse_mode = (
-            ParseMode.HTML if self.config.parse_mode == "HTML" else ParseMode.MARKDOWN_V2
-        )
+        parse_mode = ParseMode.HTML if self.config.parse_mode == "HTML" else ParseMode.MARKDOWN_V2
 
         try:
             await self._bot.send_message(
