@@ -92,6 +92,10 @@ class FeedConfig(BaseModel):
         Whether this feed is active.
     cookies : dict[str, str] | None
         Optional cookies to send with HTTP requests.
+    media_dir : str | None
+        Override for media download directory. Set to empty string to disable.
+    media_all_entries : bool | None
+        Override for downloading media from all entries vs filtered only.
     """
 
     name: str
@@ -100,6 +104,8 @@ class FeedConfig(BaseModel):
     filters: FeedFilters = Field(default_factory=FeedFilters)
     enabled: bool = True
     cookies: dict[str, str] | None = None
+    media_dir: str | None = None
+    media_all_entries: bool | None = None
 
 
 class TelegramConfig(BaseModel):
@@ -146,12 +152,18 @@ class DefaultsConfig(BaseModel):
         Maximum number of retries for failed requests.
     proxy : str | None
         Optional SOCKS proxy URL (e.g., socks5://user:pass@host:port).
+    media_dir : str | None
+        Directory to save downloaded media files. None disables media download.
+    media_all_entries : bool
+        If True, download media from all entries, not just filtered ones.
     """
 
     check_interval: int = 300
     request_timeout: int = 30
     max_retries: int = 3
     proxy: str | None = None
+    media_dir: str | None = None
+    media_all_entries: bool = False
 
 
 class StorageConfig(BaseModel):

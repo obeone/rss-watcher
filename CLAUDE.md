@@ -38,7 +38,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) format:
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`
 
-**Scopes for this project:** `rss`, `telegram`, `config`, `storage`, `filters`, `deps`
+**Scopes for this project:** `rss`, `telegram`, `config`, `storage`, `filters`, `media`, `deps`
 
 **Examples:**
 
@@ -62,7 +62,7 @@ config.yaml → load_config() → RSSWatcher.start()
         ↓                           ↓                           ↓
   _watch_feed(feed1)          _watch_feed(feed2)          _watch_feed(feedN)
         ↓                           ↓                           ↓
-  FeedParser.fetch_feed() → filter_entries() → Storage.is_seen() → TelegramNotifier.send_entry()
+  FeedParser.fetch_feed() → filter_entries() → Storage.is_seen() → MediaDownloader.process_entry() → TelegramNotifier.send_entry()
 ```
 
 **Module Responsibilities:**
@@ -75,6 +75,7 @@ config.yaml → load_config() → RSSWatcher.start()
 | [storage.py](rss_watcher/storage.py) | Async SQLite via `aiosqlite`, duplicate prevention per feed, feed initialization tracking |
 | [rss_parser.py](rss_watcher/rss_parser.py) | `FeedParser` with `aiohttp`, retry logic, feedparser parsing, SOCKS proxy support, per-feed cookies |
 | [telegram.py](rss_watcher/telegram.py) | `TelegramNotifier`, rate limiting, HTML/Markdown formatting, SOCKS proxy support |
+| [media.py](rss_watcher/media.py) | `MediaDownloader`, video extraction from HTML/enclosures/Media RSS, async downloads |
 
 **Key Design Decisions:**
 
@@ -85,6 +86,7 @@ config.yaml → load_config() → RSSWatcher.start()
 - **Concurrency:** Each feed runs as an independent `asyncio.Task` with its own check interval.
 - **Proxy support:** Optional SOCKS proxy (`defaults.proxy`) applies to both RSS fetching (via `aiohttp-socks`) and Telegram API (via `httpx`).
 - **Cookies:** Per-feed cookies can be configured for authenticated RSS feeds requiring session or auth tokens.
+- **Media downloads:** Optional video download extracts videos from HTML `<video>` tags, RSS enclosures, and Media RSS extensions. Configurable globally (`defaults.media_dir`) or per-feed (`feed.media_dir`). Per-feed setting overrides default; empty string disables for a specific feed. Option `media_all_entries` downloads from all entries, not just filtered ones. Downloads occur before Telegram notification; failures are logged but don't block notifications.
 
 <claude-mem-context>
 # Recent Activity

@@ -14,7 +14,8 @@ from pathlib import Path
 import coloredlogs
 
 from rss_watcher.config import FeedConfig, load_config
-from rss_watcher.filters import EntryFilter, RSSEntry, filter_entries
+from rss_watcher.filters import RSSEntry, filter_entries
+from rss_watcher.media import MediaDownloader
 from rss_watcher.rss_parser import FeedParser
 from rss_watcher.storage import Storage
 from rss_watcher.telegram import TelegramNotifier
@@ -42,6 +43,7 @@ class RSSWatcher:
         self.storage: Storage | None = None
         self.parser: FeedParser | None = None
         self.notifier: TelegramNotifier | None = None
+        self.media_downloader: MediaDownloader | None = None
         self._running = False
         self._tasks: list[asyncio.Task] = []
 
@@ -64,6 +66,12 @@ class RSSWatcher:
         )
 
         self.notifier = TelegramNotifier(self.config.telegram, proxy_url=proxy_url)
+
+        # Initialize media downloader (used if any feed has media_dir configured)
+        self.media_downloader = MediaDownloader(
+            proxy_url=proxy_url,
+            timeout=self.config.defaults.request_timeout,
+        )
 
         # Test Telegram connection
         if not await self.notifier.test_connection():
@@ -108,6 +116,8 @@ class RSSWatcher:
             await self.storage.close()
         if self.notifier:
             await self.notifier.close()
+        if self.media_downloader:
+            await self.media_downloader.close()
 
         logger.info("RSS Watcher stopped")
 
@@ -166,45 +176,84 @@ class RSSWatcher:
                 await self.storage.mark_feed_initialized(feed.name)
             return
 
-        # Apply filters
-        filtered_entries = filter_entries(entries, feed.filters)
+        # Determine effective media options for this feed
+        if feed.media_dir is not None:
+            effective_media_dir = feed.media_dir if feed.media_dir else None
+        else:
+            effective_media_dir = self.config.defaults.media_dir
 
-        # Find new entries
-        new_entries: list[RSSEntry] = []
-        for entry in filtered_entries:
+        if feed.media_all_entries is not None:
+            effective_media_all = feed.media_all_entries
+        else:
+            effective_media_all = self.config.defaults.media_all_entries
+
+        # Find ALL new entries (before filtering) for media download
+        all_new_entries: list[RSSEntry] = []
+        for entry in entries:
             if not await self.storage.is_seen(entry.guid, feed.name):
-                new_entries.append(entry)
+                all_new_entries.append(entry)
 
-        if not new_entries:
+        if not all_new_entries:
             logger.debug("No new entries in feed '%s'", feed.name)
-            # Mark feed as initialized if not already
             if not is_initialized:
                 await self.storage.mark_feed_initialized(feed.name)
             return
 
+        # Apply filters to get entries for notification
+        filtered_entries = filter_entries(entries, feed.filters)
+        filtered_guids = {e.guid for e in filtered_entries}
+        new_filtered_entries = [e for e in all_new_entries if e.guid in filtered_guids]
+
         logger.info(
-            "Found %d new entr%s in '%s'",
-            len(new_entries),
-            "y" if len(new_entries) == 1 else "ies",
+            "Found %d new entr%s in '%s' (%d after filters)",
+            len(all_new_entries),
+            "y" if len(all_new_entries) == 1 else "ies",
             feed.name,
+            len(new_filtered_entries),
         )
 
         if not is_initialized:
             # First time seeing this feed: mark entries as seen without notifying
             logger.info(
                 "New feed detected: marking %d existing entries as seen for '%s'",
-                len(new_entries),
+                len(all_new_entries),
                 feed.name,
             )
-            entries_to_mark = [
-                (e.guid, feed.name, e.title, e.link) for e in new_entries
-            ]
+            entries_to_mark = [(e.guid, feed.name, e.title, e.link) for e in all_new_entries]
             await self.storage.mark_many_seen(entries_to_mark)
             await self.storage.mark_feed_initialized(feed.name)
             return
 
-        # Send notifications for new entries
-        for entry in new_entries:
+        # Download media for ALL new entries if media_all_entries is True
+        if effective_media_all and effective_media_dir and self.media_downloader:
+            for entry in all_new_entries:
+                try:
+                    await self.media_downloader.process_entry(entry, effective_media_dir)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to download media for entry '%s': %s",
+                        entry.title[:50],
+                        e,
+                    )
+            # Mark non-filtered entries as seen (no notification needed)
+            non_filtered = [e for e in all_new_entries if e.guid not in filtered_guids]
+            if non_filtered:
+                entries_to_mark = [(e.guid, feed.name, e.title, e.link) for e in non_filtered]
+                await self.storage.mark_many_seen(entries_to_mark)
+
+        # Send notifications for filtered new entries
+        for entry in new_filtered_entries:
+            # Download media if NOT media_all_entries (already done above if True)
+            if not effective_media_all and effective_media_dir and self.media_downloader:
+                try:
+                    await self.media_downloader.process_entry(entry, effective_media_dir)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to download media for entry '%s': %s",
+                        entry.title[:50],
+                        e,
+                    )
+
             try:
                 success = await self.notifier.send_entry(entry)
                 if success:

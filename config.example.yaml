@@ -25,6 +25,12 @@ defaults:
   # Supports socks4://, socks5://, http:// protocols
   # Example: socks5://user:pass@proxy.example.com:1080
   # proxy: "${PROXY_URL:-}"
+  # Optional directory to save video files found in RSS entries
+  # Videos are extracted from <video> tags, enclosures, and Media RSS
+  # Set to null or omit to disable video downloads
+  # media_dir: "./media"
+  # Download media from ALL entries, not just filtered ones (default: false)
+  # media_all_entries: true
 
 # Storage settings
 storage:
@@ -103,10 +109,21 @@ feeds:
   - name: "Private Feed"
     url: "https://example.com/private-feed.xml"
     cookies:
-      session_id: "${RSS_SESSION_ID}"
+      session_id: "${RSS_SESSION_ID:-}"
       auth_token: "some-auth-token"
 
-  # Example 7: Disabled feed (won't be checked)
+  # Example 7: Feed with video download to custom directory
+  - name: "Video Feed"
+    url: "https://example.com/video-feed.xml"
+    media_dir: "./videos/custom"  # Override default media_dir
+    media_all_entries: true  # Download videos even from non-matching entries
+
+  # Example 8: Feed with video download disabled (even if default is set)
+  - name: "Text Only Feed"
+    url: "https://example.com/text-feed.xml"
+    media_dir: ""  # Empty string disables video download
+
+  # Example 9: Disabled feed (won't be checked)
   - name: "Archived Feed"
     url: "https://example.com/old-feed.xml"
     enabled: false

@@ -19,7 +19,9 @@ services:
       # Configuration file
       - ./config.yaml:/app/config.yaml:ro
       # Persistent storage for seen entries database
-      - rss-watcher-data:/app/data
+      - ./data:/app/data
+      # Optional: media download directory (uncomment if using media_dir)
+      - ./media:/app/media
 
     # Optional: enable verbose logging
     # command: ["-c", "/app/config.yaml", "-v"]
