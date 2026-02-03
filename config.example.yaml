@@ -36,7 +36,7 @@ feeds:
   # Example 1: Simple feed with no filters
   - name: "Hacker News"
     url: "https://news.ycombinator.com/rss"
-    check_interval: 600  # Check every 10 minutes (overrides default)
+    check_interval: 600 # Check every 10 minutes (overrides default)
     enabled: true
 
   # Example 2: Feed with keyword filters
@@ -74,7 +74,7 @@ feeds:
   # Example 4: Feed with regex filters
   - name: "Security Alerts"
     url: "https://example.com/security-feed.xml"
-    check_interval: 180  # Check every 3 minutes for security alerts
+    check_interval: 180 # Check every 3 minutes for security alerts
     filters:
       regex:
         # Match titles starting with [CRITICAL] or [URGENT]
@@ -97,7 +97,7 @@ feeds:
           - "alpha"
           - "rc"
       regex:
-        title: "v[0-9]+\\.[0-9]+\\.[0-9]+$"  # Match semver releases only
+        title: "v[0-9]+\\.[0-9]+\\.[0-9]+$" # Match semver releases only
 
   # Example 6: Feed with cookies for authenticated access
   - name: "Private Feed"
