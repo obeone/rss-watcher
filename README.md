@@ -27,18 +27,21 @@ Monitor RSS/Atom feeds and receive Telegram notifications for new entries with a
 #### Using Docker (Recommended)
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/yourusername/rss-watcher.git
    cd rss-watcher
    ```
 
 2. Create configuration:
+
    ```bash
    cp config.example.yaml config.yaml
    cp .env.example .env
    ```
 
 3. Edit `.env` with your Telegram credentials:
+
    ```bash
    TELEGRAM_BOT_TOKEN=your_bot_token_here
    TELEGRAM_CHAT_ID=your_chat_id_here
@@ -47,6 +50,7 @@ Monitor RSS/Atom feeds and receive Telegram notifications for new entries with a
 4. Edit `config.yaml` with your feeds (see [Configuration](#configuration))
 
 5. Start the service:
+
    ```bash
    docker compose up -d
    ```
@@ -54,12 +58,14 @@ Monitor RSS/Atom feeds and receive Telegram notifications for new entries with a
 #### Local Installation
 
 1. Clone and setup:
+
    ```bash
    git clone https://github.com/yourusername/rss-watcher.git
    cd rss-watcher
    ```
 
 2. Create virtual environment with uv:
+
    ```bash
    uv venv
    source .venv/bin/activate
@@ -67,18 +73,21 @@ Monitor RSS/Atom feeds and receive Telegram notifications for new entries with a
    ```
 
 3. Create and edit configuration:
+
    ```bash
    cp config.example.yaml config.yaml
    # Edit config.yaml with your settings
    ```
 
 4. Set environment variables:
+
    ```bash
    export TELEGRAM_BOT_TOKEN="your_bot_token"
    export TELEGRAM_CHAT_ID="your_chat_id"
    ```
 
 5. Run:
+
    ```bash
    rss-watcher -c config.yaml
    ```
@@ -209,7 +218,7 @@ telegram:
 
 ### Command Line Options
 
-```
+```text
 rss-watcher [-h] [-c CONFIG] [-v]
 
 Options:
@@ -238,7 +247,7 @@ docker compose up -d --build
 
 Notifications are sent in HTML format by default:
 
-```
+```text
 [Feed Name]
 Entry Title (linked)
 by Author Name
