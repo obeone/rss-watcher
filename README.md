@@ -1,147 +1,126 @@
-# RSS Watcher
+# 📡 RSS Watcher
 
-Monitor RSS/Atom feeds and receive Telegram notifications for new entries with advanced filtering.
+> Monitor RSS/Atom feeds and receive Telegram notifications with advanced filtering
 
-## Features
+![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776ab?style=flat-square&logo=python&logoColor=white)
+![Docker Ready](https://img.shields.io/badge/docker-ready-2496ed?style=flat-square&logo=docker&logoColor=white)
+![Telegram Bot](https://img.shields.io/badge/telegram-bot-26a5e4?style=flat-square&logo=telegram&logoColor=white)
+![MIT License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+![Async Powered](https://img.shields.io/badge/async-powered-ff6b6b?style=flat-square)
 
-- **Multiple feeds**: Monitor multiple RSS/Atom feeds simultaneously
-- **Advanced filtering**: Filter entries by keywords, categories, authors, and regex patterns
-- **Telegram notifications**: Receive formatted notifications via Telegram bot
-- **Persistence**: SQLite storage prevents duplicate notifications after restarts
-- **Docker support**: Easy deployment with Docker and docker compose
-- **Configurable**: YAML configuration with environment variable support
-- **Proxy support**: Optional SOCKS/HTTP proxy for all network requests
-- **Cookie authentication**: Per-feed cookies for authenticated RSS feeds
+---
 
-## Quick Start
+## ✨ Features
+
+| Feature                | Description                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
+| 📡 **Multiple Feeds**  | Monitor unlimited RSS/Atom feeds simultaneously                      |
+| 🔍 **Smart Filtering** | Keywords, categories, authors, and regex patterns with AND/OR logic  |
+| 📱 **Telegram Alerts** | Beautifully formatted notifications via Telegram bot                 |
+| 💾 **Persistence**     | SQLite storage prevents duplicates across restarts                   |
+| 🐳 **Docker Ready**    | One-command deployment with docker compose                           |
+| 🎬 **Media Download**  | Automatically download videos from feed entries                      |
+| 🌐 **Proxy Support**   | SOCKS4/5 and HTTP proxy for all requests                             |
+| 🍪 **Auth Cookies**    | Per-feed cookie support for authenticated feeds                      |
+| ⚙️ **Configurable**    | YAML config with environment variable substitution                   |
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.11+ (for local installation)
-- Docker and docker compose (for containerized deployment)
-- Telegram Bot token (get from [@BotFather](https://t.me/BotFather))
-- Telegram Chat ID (get from [@userinfobot](https://t.me/userinfobot))
+- **Python 3.11+** (local) or **Docker** (containerized)
+- **Telegram Bot** token from [@BotFather](https://t.me/BotFather)
+- **Chat ID** from [@userinfobot](https://t.me/userinfobot)
 
-### Installation
+### 🐳 Docker (Recommended)
 
-#### Using Docker (Recommended)
+```bash
+# Clone and configure
+git clone https://github.com/yourusername/rss-watcher.git
+cd rss-watcher
+cp config.example.yaml config.yaml
+cp .env.example .env
 
-1. Clone the repository:
+# Edit .env with your Telegram credentials
+# TELEGRAM_BOT_TOKEN=your_bot_token
+# TELEGRAM_CHAT_ID=your_chat_id
 
-   ```bash
-   git clone https://github.com/yourusername/rss-watcher.git
-   cd rss-watcher
-   ```
+# Launch
+docker compose up -d
+```
 
-2. Create configuration:
+### 🐍 Local Installation
 
-   ```bash
-   cp config.example.yaml config.yaml
-   cp .env.example .env
-   ```
+```bash
+# Clone and setup
+git clone https://github.com/yourusername/rss-watcher.git
+cd rss-watcher
 
-3. Edit `.env` with your Telegram credentials:
+# Create environment with uv
+uv venv && source .venv/bin/activate
+uv pip install .
 
-   ```bash
-   TELEGRAM_BOT_TOKEN=your_bot_token_here
-   TELEGRAM_CHAT_ID=your_chat_id_here
-   ```
+# Configure
+cp config.example.yaml config.yaml
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export TELEGRAM_CHAT_ID="your_chat_id"
 
-4. Edit `config.yaml` with your feeds (see [Configuration](#configuration))
+# Run
+rss-watcher -c config.yaml
+```
 
-5. Start the service:
+---
 
-   ```bash
-   docker compose up -d
-   ```
+## ⚙️ Configuration
 
-#### Local Installation
+Configuration uses YAML with environment variable substitution (`${VAR}` or `${VAR:-default}`).
 
-1. Clone and setup:
-
-   ```bash
-   git clone https://github.com/yourusername/rss-watcher.git
-   cd rss-watcher
-   ```
-
-2. Create virtual environment with uv:
-
-   ```bash
-   uv venv
-   source .venv/bin/activate
-   uv pip install .
-   ```
-
-3. Create and edit configuration:
-
-   ```bash
-   cp config.example.yaml config.yaml
-   # Edit config.yaml with your settings
-   ```
-
-4. Set environment variables:
-
-   ```bash
-   export TELEGRAM_BOT_TOKEN="your_bot_token"
-   export TELEGRAM_CHAT_ID="your_chat_id"
-   ```
-
-5. Run:
-
-   ```bash
-   rss-watcher -c config.yaml
-   ```
-
-## Configuration
-
-Configuration is done via YAML file with environment variable substitution.
-
-### Basic Structure
+### 📋 Basic Structure
 
 ```yaml
 telegram:
   bot_token: "${TELEGRAM_BOT_TOKEN}"
   chat_id: "${TELEGRAM_CHAT_ID}"
   parse_mode: "HTML"  # or "Markdown"
-  disable_web_page_preview: false
 
 defaults:
-  check_interval: 300  # seconds
+  check_interval: 300  # seconds between checks
   request_timeout: 30
   max_retries: 3
   proxy: "socks5://user:pass@proxy:1080"  # optional
+  media_dir: "media"  # optional, for video downloads
 
 storage:
   database_path: "data/rss_watcher.db"
 
 feeds:
-  - name: "Feed Name"
+  - name: "Tech News"
     url: "https://example.com/feed.xml"
-    check_interval: 600  # optional override
-    enabled: true
-    cookies:  # optional, for authenticated feeds
-      session_id: "${SESSION_ID}"
+    check_interval: 600  # override default
     filters:
-      # ... see below
+      keywords:
+        include: ["python", "rust"]
 ```
 
-### Filter Options
+### 🔍 Filter Options
 
-All filters are optional and combinable. All filter types must pass for an entry to be accepted (AND logic). Within each filter type, include rules use OR logic.
+All filters combine with **AND** logic (all must pass). Within each filter, include rules use **OR** logic (any match passes).
 
-#### Keywords Filter
+#### 📝 Keywords Filter
 
-Filter by words in title and content:
+Filter by words in title/content:
 
 ```yaml
 filters:
   keywords:
-    include: ["python", "rust"]  # Include if contains any of these
-    exclude: ["spam", "ad"]      # Exclude if contains any of these
-    case_sensitive: false        # Default: false
+    include: ["python", "rust"]  # Match if contains ANY
+    exclude: ["spam", "ad"]      # Reject if contains ANY
+    case_sensitive: false
 ```
 
-#### Categories Filter
+#### 🏷️ Categories Filter
 
 Filter by RSS categories/tags:
 
@@ -153,7 +132,7 @@ filters:
     case_sensitive: false
 ```
 
-#### Authors Filter
+#### 👤 Authors Filter
 
 Filter by author name:
 
@@ -165,7 +144,7 @@ filters:
     case_sensitive: false
 ```
 
-#### Regex Filter
+#### 🔤 Regex Filter
 
 Filter using regular expressions:
 
@@ -176,22 +155,22 @@ filters:
     content: "release.*v[0-9]+"    # Match content pattern
 ```
 
-### Proxy Configuration
+### 🌐 Proxy Configuration
 
-Route all HTTP requests through a SOCKS or HTTP proxy:
+Route all requests through a proxy server:
 
 ```yaml
 defaults:
   proxy: "socks5://user:pass@proxy.example.com:1080"
 ```
 
-Supported protocols: `socks4://`, `socks5://`, `http://`
+> **Supported protocols:** `socks4://`, `socks5://`, `http://`
+>
+> Applies to both RSS fetching and Telegram API requests.
 
-The proxy applies to both RSS feed fetching and Telegram API requests.
+### 🍪 Cookie Authentication
 
-### Cookie Authentication
-
-For RSS feeds requiring authentication, configure per-feed cookies:
+For feeds requiring authentication:
 
 ```yaml
 feeds:
@@ -202,87 +181,103 @@ feeds:
       auth_token: "your-auth-token"
 ```
 
-Cookies support environment variable substitution for secure credential management.
+### 🎬 Media Downloads
 
-### Environment Variables
-
-Variables in the format `${VAR_NAME}` or `${VAR_NAME:-default}` are substituted from environment:
+Automatically download videos from feed entries:
 
 ```yaml
-telegram:
-  bot_token: "${TELEGRAM_BOT_TOKEN}"
-  chat_id: "${TELEGRAM_CHAT_ID:-12345}"  # With default value
+defaults:
+  media_dir: "media"  # Global default
+
+feeds:
+  - name: "Video Feed"
+    url: "https://example.com/videos.xml"
+    media_dir: "videos/special"  # Override per feed
+    media_all_entries: true      # Download from all entries, not just filtered
 ```
 
-## Usage
+> Videos are extracted from HTML `<video>` tags, RSS enclosures, and Media RSS extensions.
 
-### Command Line Options
+---
+
+## 📖 Usage
+
+### Command Line
 
 ```text
 rss-watcher [-h] [-c CONFIG] [-v]
 
 Options:
   -h, --help            Show help message
-  -c, --config CONFIG   Path to configuration file (default: config.yaml)
-  -v, --verbose         Enable verbose (debug) logging
+  -c, --config CONFIG   Config file path (default: config.yaml)
+  -v, --verbose         Enable debug logging
 ```
 
 ### Docker Commands
 
-```bash
-# Start service
-docker compose up -d
+| Command                        | Description         |
+| ------------------------------ | ------------------- |
+| `docker compose up -d`         | Start service       |
+| `docker compose logs -f`       | View live logs      |
+| `docker compose down`          | Stop service        |
+| `docker compose up -d --build` | Rebuild and restart |
 
-# View logs
-docker compose logs -f
+### 📬 Message Format
 
-# Stop service
-docker compose down
-
-# Rebuild after changes
-docker compose up -d --build
-```
-
-## Message Format
-
-Notifications are sent in HTML format by default:
+Notifications are sent in HTML format:
 
 ```text
 [Feed Name]
-Entry Title (linked)
-by Author Name
-#tag1 #tag2
+📰 Entry Title (linked)
+👤 by Author Name
+🏷️ #tag1 #tag2
 
 Entry summary/content...
 ```
 
-## Development
+---
+
+## 🛠️ Development
 
 ### Setup
 
 ```bash
-uv venv
-source .venv/bin/activate
+uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
-### Running Tests
+### Commands
 
-```bash
-pytest
+| Task             | Command                          |
+| ---------------- | -------------------------------- |
+| Run tests        | `pytest`                         |
+| Single test file | `pytest tests/test_filters.py -v`|
+| Lint code        | `ruff check .`                   |
+| Format code      | `ruff format .`                  |
+
+### Architecture
+
+```mermaid
+flowchart TB
+    A[config.yaml] --> B[RSSWatcher.start]
+
+    B --> F1[Feed 1]
+    B --> F2[Feed 2]
+    B --> FN[Feed N]
+
+    F1 & F2 & FN --> P1[Fetch]
+    P1 --> P2[Filter]
+    P2 --> P3[Dedupe]
+    P3 --> P4[Download Media]
+    P4 --> P5[Telegram Notify]
 ```
 
-### Code Quality
+---
 
-```bash
-ruff check .
-ruff format .
-```
-
-## License
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## Author
+---
 
-Grégoire Compagnon <obeone@obeone.org>
+Made with ❤️ by [Grégoire Compagnon](mailto:obeone@obeone.org)
