@@ -5,7 +5,9 @@ Handles fetching and parsing RSS/Atom feeds using feedparser
 with async HTTP requests.
 """
 
+import html
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -16,6 +18,38 @@ from rss_watcher.config import FeedConfig
 from rss_watcher.filters import RSSEntry
 
 logger = logging.getLogger(__name__)
+
+# Pattern to match HTML entities, excluding XML's five predefined entities
+# XML predefined: &lt; &gt; &amp; &quot; &apos;
+_HTML_ENTITY_PATTERN = re.compile(r"&(?!(?:lt|gt|amp|quot|apos);)([a-zA-Z][a-zA-Z0-9]*);")
+
+
+def _unescape_html_entities(content: str) -> str:
+    """
+    Unescape HTML named entities while preserving XML predefined entities.
+
+    Parameters
+    ----------
+    content : str
+        XML/HTML content with potentially mixed entities.
+
+    Returns
+    -------
+    str
+        Content with HTML entities resolved but XML entities preserved.
+    """
+
+    def replace_entity(match: re.Match) -> str:
+        entity_name = match.group(1)
+        # Try to decode the HTML entity
+        decoded = html.unescape(f"&{entity_name};")
+        # If it was decoded (different from input), return decoded
+        if decoded != f"&{entity_name};":
+            return decoded
+        # Otherwise return original (unknown entity)
+        return match.group(0)
+
+    return _HTML_ENTITY_PATTERN.sub(replace_entity, content)
 
 
 class FeedParser:
@@ -151,6 +185,11 @@ class FeedParser:
         # Strip leading whitespace - some servers return content with
         # leading newlines which breaks XML declaration parsing
         content = content.lstrip()
+
+        # Resolve HTML named entities (e.g., &nbsp;, &mdash;) to Unicode
+        # while preserving XML predefined entities (&lt; &gt; &amp; &quot; &apos;)
+        content = _unescape_html_entities(content)
+
         parsed: Any = feedparser.parse(content)
 
         if parsed.bozo and parsed.bozo_exception:
