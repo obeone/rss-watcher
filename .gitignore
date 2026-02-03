@@ -29,6 +29,8 @@ ENV/
 .idea/
 .vscode/
 .claude/settings.local.json
+**/CLAUDE.md
+!/CLAUDE.md
 *.swp
 *.swo
 *~
