@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test RSS Feed</title>
+    <link>https://example.com</link>
+    <description>A test RSS feed for unit testing</description>
+    <item>
+      <title>First Entry</title>
+      <link>https://example.com/entry1</link>
+      <guid>https://example.com/entry1</guid>
+      <description>This is the first test entry content.</description>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+      <author>John Doe</author>
+      <category>Technology</category>
+      <category>Testing</category>
+    </item>
+    <item>
+      <title>Second Entry with Python keyword</title>
+      <link>https://example.com/entry2</link>
+      <guid>https://example.com/entry2</guid>
+      <description>This entry talks about Python programming language.</description>
+      <pubDate>Tue, 02 Jan 2024 12:00:00 GMT</pubDate>
+      <author>Jane Smith</author>
+      <category>Programming</category>
+    </item>
+    <item>
+      <title>Third Entry</title>
+      <link>https://example.com/entry3</link>
+      <guid>https://example.com/entry3</guid>
+      <description>This entry contains spam content that should be excluded.</description>
+      <pubDate>Wed, 03 Jan 2024 12:00:00 GMT</pubDate>
+      <author>Bob Wilson</author>
+      <category>Spam</category>
+    </item>
+    <item>
+      <title>Entry with Video</title>
+      <link>https://example.com/entry4</link>
+      <guid>https://example.com/entry4</guid>
+      <description>&lt;p&gt;An entry with embedded video.&lt;/p&gt;&lt;video src="https://example.com/video.mp4"&gt;&lt;/video&gt;</description>
+      <pubDate>Thu, 04 Jan 2024 12:00:00 GMT</pubDate>
+      <author>Video Author</author>
+      <category>Media</category>
+      <enclosure url="https://example.com/video.mp4" type="video/mp4" length="1000000"/>
+    </item>
+  </channel>
+</rss>
