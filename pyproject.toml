@@ -59,7 +59,7 @@ line-length = 100
 select = ["E", "F", "W", "I", "N", "D", "UP", "B", "C4", "SIM"]
 ignore = ["D100", "D104", "D107"]
 
-[tool.ruff.lint.pydocstring-convention]
+[tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
 [tool.pytest.ini_options]
