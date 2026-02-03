@@ -2,9 +2,11 @@
 
 services:
   rss-watcher:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/obeone/rss-watcher:latest
+    # To build locally instead of using pre-built image, comment 'image' and uncomment:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: rss-watcher
     restart: unless-stopped
 

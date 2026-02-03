@@ -36,9 +36,11 @@
 
 ### 🐳 Docker (Recommended)
 
+Pre-built images are available on [GitHub Container Registry](https://ghcr.io/obeone/rss-watcher) and [Docker Hub](https://hub.docker.com/r/obeoneorg/rss-watcher).
+
 ```bash
 # Clone and configure
-git clone https://github.com/yourusername/rss-watcher.git
+git clone https://github.com/obeone/rss-watcher.git
 cd rss-watcher
 cp config.example.yaml config.yaml
 cp .env.example .env
@@ -47,15 +49,23 @@ cp .env.example .env
 # TELEGRAM_BOT_TOKEN=your_bot_token
 # TELEGRAM_CHAT_ID=your_chat_id
 
-# Launch
+# Launch (uses pre-built image)
 docker compose up -d
+
+# Or build locally
+docker compose up -d --build
 ```
+
+**Available images:**
+
+- `ghcr.io/obeone/rss-watcher:latest` (recommended)
+- `obeoneorg/rss-watcher:latest` (Docker Hub mirror)
 
 ### 🐍 Local Installation
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/rss-watcher.git
+git clone https://github.com/obeone/rss-watcher.git
 cd rss-watcher
 
 # Create environment with uv
