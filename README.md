@@ -10,6 +10,8 @@ Monitor RSS/Atom feeds and receive Telegram notifications for new entries with a
 - **Persistence**: SQLite storage prevents duplicate notifications after restarts
 - **Docker support**: Easy deployment with Docker and docker compose
 - **Configurable**: YAML configuration with environment variable support
+- **Proxy support**: Optional SOCKS/HTTP proxy for all network requests
+- **Cookie authentication**: Per-feed cookies for authenticated RSS feeds
 
 ## Quick Start
 
@@ -98,6 +100,7 @@ defaults:
   check_interval: 300  # seconds
   request_timeout: 30
   max_retries: 3
+  proxy: "socks5://user:pass@proxy:1080"  # optional
 
 storage:
   database_path: "data/rss_watcher.db"
@@ -107,6 +110,8 @@ feeds:
     url: "https://example.com/feed.xml"
     check_interval: 600  # optional override
     enabled: true
+    cookies:  # optional, for authenticated feeds
+      session_id: "${SESSION_ID}"
     filters:
       # ... see below
 ```
@@ -161,6 +166,34 @@ filters:
     title: "^\\[IMPORTANT\\]"      # Match title pattern
     content: "release.*v[0-9]+"    # Match content pattern
 ```
+
+### Proxy Configuration
+
+Route all HTTP requests through a SOCKS or HTTP proxy:
+
+```yaml
+defaults:
+  proxy: "socks5://user:pass@proxy.example.com:1080"
+```
+
+Supported protocols: `socks4://`, `socks5://`, `http://`
+
+The proxy applies to both RSS feed fetching and Telegram API requests.
+
+### Cookie Authentication
+
+For RSS feeds requiring authentication, configure per-feed cookies:
+
+```yaml
+feeds:
+  - name: "Private Feed"
+    url: "https://example.com/private-feed.xml"
+    cookies:
+      session_id: "${RSS_SESSION_ID}"
+      auth_token: "your-auth-token"
+```
+
+Cookies support environment variable substitution for secure credential management.
 
 ### Environment Variables
 
