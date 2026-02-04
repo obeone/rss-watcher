@@ -1,7 +1,7 @@
 """
 Unit tests for the media download module.
 
-Tests cover video URL extraction, filename handling, and downloads.
+Tests cover video URL extraction, filename handling, downloads, and security.
 """
 
 from pathlib import Path
@@ -17,6 +17,7 @@ from rss_watcher.media import (
     VIDEO_SRC_PATTERN,
     SOURCE_SRC_PATTERN,
     MediaDownloader,
+    redact_proxy_url,
 )
 
 
@@ -534,6 +535,211 @@ class TestMediaDownloaderProxy:
 
             await downloader._get_session()
 
-            mock_connector.from_url.assert_called_once_with("socks5://localhost:1080")
+            # Verify ProxyConnector.from_url was called (with ssl parameter)
+            mock_connector.from_url.assert_called_once()
+            call_args = mock_connector.from_url.call_args
+            assert call_args[0][0] == "socks5://localhost:1080"
 
         await downloader.close()
+
+
+class TestSSRFProtection:
+    """Tests for SSRF protection in media downloads."""
+
+    def test_validate_url_allows_http(self) -> None:
+        """Test that http:// URLs are allowed."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("http://example.com/video.mp4") is True
+
+    def test_validate_url_allows_https(self) -> None:
+        """Test that https:// URLs are allowed."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("https://example.com/video.mp4") is True
+
+    def test_validate_url_blocks_file(self) -> None:
+        """Test that file:// URLs are blocked."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("file:///etc/passwd") is False
+
+    def test_validate_url_blocks_ftp(self) -> None:
+        """Test that ftp:// URLs are blocked."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("ftp://example.com/video.mp4") is False
+
+    def test_validate_url_blocks_gopher(self) -> None:
+        """Test that gopher:// URLs are blocked."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("gopher://example.com/") is False
+
+    def test_validate_url_blocks_data(self) -> None:
+        """Test that data: URLs are blocked."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("data:video/mp4;base64,AAAA") is False
+
+    def test_validate_url_blocks_no_host(self) -> None:
+        """Test that URLs without host are blocked."""
+        downloader = MediaDownloader()
+        assert downloader._validate_url("http:///path/to/file") is False
+
+    async def test_download_blocked_url_returns_none(
+        self, tmp_media_dir: Path
+    ) -> None:
+        """Test that downloading a blocked URL returns None."""
+        downloader = MediaDownloader()
+
+        result = await downloader.download_video(
+            "file:///etc/passwd",
+            "Test Feed",
+            str(tmp_media_dir),
+        )
+
+        assert result is None
+        await downloader.close()
+
+
+class TestPathTraversalProtection:
+    """Tests for path traversal protection in media downloads."""
+
+    def test_validate_path_within_base_valid(self, tmp_media_dir: Path) -> None:
+        """Test valid path within base directory."""
+        downloader = MediaDownloader()
+        base_dir = tmp_media_dir
+        target = base_dir / "feed" / "video.mp4"
+
+        assert downloader._validate_path_within_base(base_dir, target) is True
+
+    def test_validate_path_within_base_traversal(self, tmp_media_dir: Path) -> None:
+        """Test path traversal attempt is blocked."""
+        downloader = MediaDownloader()
+        base_dir = tmp_media_dir
+        target = base_dir / ".." / "etc" / "passwd"
+
+        # The resolved path will be outside base_dir
+        assert downloader._validate_path_within_base(base_dir, target) is False
+
+    def test_validate_path_within_base_absolute_escape(self, tmp_media_dir: Path) -> None:
+        """Test absolute path escape attempt is blocked."""
+        downloader = MediaDownloader()
+        base_dir = tmp_media_dir
+        target = Path("/etc/passwd")
+
+        assert downloader._validate_path_within_base(base_dir, target) is False
+
+
+class TestDownloadSizeLimits:
+    """Tests for download size limit enforcement."""
+
+    async def test_download_within_size_limit(self, tmp_media_dir: Path) -> None:
+        """Test download proceeds when within size limit."""
+        max_size = 1024 * 1024  # 1 MB
+        downloader = MediaDownloader(max_download_size=max_size)
+        small_content = b"x" * 1000
+
+        with aioresponses() as m:
+            m.get(
+                "https://example.com/small.mp4",
+                body=small_content,
+                headers={"Content-Length": str(len(small_content))},
+            )
+
+            result = await downloader.download_video(
+                "https://example.com/small.mp4",
+                "Test Feed",
+                str(tmp_media_dir),
+            )
+
+        assert result is not None
+        assert result.exists()
+        await downloader.close()
+
+    async def test_download_exceeds_content_length(
+        self, tmp_media_dir: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test download blocked when Content-Length exceeds limit."""
+        max_size = 1024  # 1 KB
+        downloader = MediaDownloader(max_download_size=max_size)
+
+        with aioresponses() as m:
+            m.get(
+                "https://example.com/large.mp4",
+                body=b"",  # Body doesn't matter, Content-Length is checked first
+                headers={"Content-Length": str(10 * 1024 * 1024)},  # 10 MB
+            )
+
+            result = await downloader.download_video(
+                "https://example.com/large.mp4",
+                "Test Feed",
+                str(tmp_media_dir),
+            )
+
+        assert result is None
+        assert "too large" in caplog.text.lower()
+        await downloader.close()
+
+    async def test_download_exceeds_limit_during_streaming(
+        self, tmp_media_dir: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test download stopped when actual size exceeds limit during streaming."""
+        max_size = 100
+        downloader = MediaDownloader(max_download_size=max_size)
+        # Large content but no Content-Length header
+        large_content = b"x" * 500
+
+        with aioresponses() as m:
+            m.get(
+                "https://example.com/streaming.mp4",
+                body=large_content,
+                # No Content-Length header, so streaming check kicks in
+            )
+
+            result = await downloader.download_video(
+                "https://example.com/streaming.mp4",
+                "Test Feed",
+                str(tmp_media_dir),
+            )
+
+        assert result is None
+        assert "exceeded" in caplog.text.lower()
+        # Verify partial file is cleaned up
+        feed_dir = tmp_media_dir / "Test_Feed"
+        if feed_dir.exists():
+            assert len(list(feed_dir.iterdir())) == 0
+        await downloader.close()
+
+
+class TestProxyUrlRedaction:
+    """Tests for proxy URL credential redaction."""
+
+    def test_redact_url_with_password(self) -> None:
+        """Test password is redacted from proxy URL."""
+        url = "socks5://user:secretpassword@proxy.example.com:1080"
+        redacted = redact_proxy_url(url)
+
+        assert "secretpassword" not in redacted
+        assert "****" in redacted
+        assert "user" in redacted
+        assert "proxy.example.com" in redacted
+        assert "1080" in redacted
+
+    def test_redact_url_without_password(self) -> None:
+        """Test URL without password is returned unchanged."""
+        url = "socks5://proxy.example.com:1080"
+        redacted = redact_proxy_url(url)
+
+        assert redacted == url
+
+    def test_redact_url_with_username_only(self) -> None:
+        """Test URL with username but no password is returned unchanged."""
+        url = "socks5://user@proxy.example.com:1080"
+        redacted = redact_proxy_url(url)
+
+        # No password means no redaction needed
+        assert "user@" in redacted
+
+    def test_redact_malformed_url(self) -> None:
+        """Test malformed URL returns safe fallback."""
+        url = "not-a-valid-url-at-all:::"
+        redacted = redact_proxy_url(url)
+
+        # Should return original or fallback, not crash
+        assert redacted is not None

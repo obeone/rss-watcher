@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -83,7 +84,7 @@ class FeedConfig(BaseModel):
     name : str
         Human-readable name for the feed.
     url : str
-        URL of the RSS/Atom feed.
+        URL of the RSS/Atom feed (must be http or https).
     check_interval : int | None
         Override for check interval in seconds.
     filters : FeedFilters
@@ -106,6 +107,21 @@ class FeedConfig(BaseModel):
     cookies: dict[str, str] | None = None
     media_dir: str | None = None
     media_all_entries: bool | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_scheme(cls, v: str) -> str:
+        """Validate that URL uses http or https scheme to prevent SSRF attacks."""
+        if not v or not v.strip():
+            raise ValueError("URL cannot be empty")
+        parsed = urlparse(v)
+        if parsed.scheme.lower() not in ("http", "https"):
+            raise ValueError(
+                f"URL scheme must be 'http' or 'https', got '{parsed.scheme}'"
+            )
+        if not parsed.netloc:
+            raise ValueError("URL must have a valid host")
+        return v
 
 
 class TelegramConfig(BaseModel):
@@ -156,6 +172,10 @@ class DefaultsConfig(BaseModel):
         Directory to save downloaded media files. None disables media download.
     media_all_entries : bool
         If True, download media from all entries, not just filtered ones.
+    user_agent : str
+        User-Agent header for HTTP requests.
+    max_download_size : int | None
+        Maximum file size in bytes for media downloads. None means no limit.
     """
 
     check_interval: int = 300
@@ -164,6 +184,8 @@ class DefaultsConfig(BaseModel):
     proxy: str | None = None
     media_dir: str | None = None
     media_all_entries: bool = False
+    user_agent: str = "RSS-Watcher/1.0"
+    max_download_size: int | None = None
 
 
 class StorageConfig(BaseModel):

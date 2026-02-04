@@ -6,12 +6,62 @@ Provides combinable filters for keywords, categories, authors, and regex pattern
 
 import logging
 import re
+import signal
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
 from rss_watcher.config import FeedFilters, KeywordFilter, RegexFilter
 
 logger = logging.getLogger(__name__)
+
+# Maximum length for regex patterns to prevent DoS
+MAX_REGEX_PATTERN_LENGTH = 1000
+
+# Timeout for regex operations in seconds (ReDoS protection)
+REGEX_TIMEOUT_SECONDS = 2
+
+
+class RegexTimeoutError(Exception):
+    """Raised when a regex operation times out."""
+
+    pass
+
+
+@contextmanager
+def regex_timeout(seconds: int):
+    """
+    Context manager to limit regex execution time (ReDoS protection).
+
+    Note: This uses SIGALRM which only works on Unix-like systems.
+    On Windows, this is a no-op.
+
+    Parameters
+    ----------
+    seconds : int
+        Maximum time in seconds before timeout.
+
+    Raises
+    ------
+    RegexTimeoutError
+        If the operation exceeds the timeout.
+    """
+
+    def timeout_handler(signum, frame):
+        raise RegexTimeoutError(f"Regex operation timed out after {seconds} seconds")
+
+    # Only use signals on Unix-like systems
+    if hasattr(signal, "SIGALRM"):
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(seconds)
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+    else:
+        # On Windows, just proceed without timeout
+        yield
 
 
 @dataclass
@@ -126,22 +176,60 @@ class EntryFilter:
         self._compile_regex_patterns()
 
     def _compile_regex_patterns(self) -> None:
-        """Compile regex patterns for efficiency."""
+        """Compile regex patterns for efficiency with ReDoS protection."""
         regex = self.filters.regex
 
         if regex.title:
-            try:
-                self._compiled_regex["title"] = re.compile(regex.title, re.IGNORECASE)
-            except re.error as e:
-                logger.error("Invalid title regex pattern '%s': %s", regex.title, e)
-                self._compiled_regex["title"] = None
+            compiled = self._safe_compile_regex(regex.title, "title")
+            if compiled is not None:
+                self._compiled_regex["title"] = compiled
 
         if regex.content:
-            try:
-                self._compiled_regex["content"] = re.compile(regex.content, re.IGNORECASE)
-            except re.error as e:
-                logger.error("Invalid content regex pattern '%s': %s", regex.content, e)
-                self._compiled_regex["content"] = None
+            compiled = self._safe_compile_regex(regex.content, "content")
+            if compiled is not None:
+                self._compiled_regex["content"] = compiled
+
+    def _safe_compile_regex(
+        self, pattern: str, field_name: str
+    ) -> re.Pattern | None:
+        """
+        Safely compile a regex pattern with length and timeout limits.
+
+        Parameters
+        ----------
+        pattern : str
+            The regex pattern to compile.
+        field_name : str
+            Name of the field for logging.
+
+        Returns
+        -------
+        re.Pattern | None
+            Compiled pattern or None if compilation failed.
+        """
+        # Check pattern length to prevent DoS
+        if len(pattern) > MAX_REGEX_PATTERN_LENGTH:
+            logger.error(
+                "Regex pattern for '%s' exceeds max length (%d > %d chars)",
+                field_name,
+                len(pattern),
+                MAX_REGEX_PATTERN_LENGTH,
+            )
+            return None
+
+        try:
+            with regex_timeout(REGEX_TIMEOUT_SECONDS):
+                return re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            logger.error("Invalid %s regex pattern '%s': %s", field_name, pattern, e)
+            return None
+        except RegexTimeoutError:
+            logger.error(
+                "Regex compilation timed out for '%s' pattern: %s",
+                field_name,
+                pattern[:100],
+            )
+            return None
 
     def matches(self, entry: RSSEntry) -> bool:
         """
@@ -301,7 +389,7 @@ class EntryFilter:
 
     def _check_regex(self, entry: RSSEntry) -> bool:
         """
-        Check regex filters.
+        Check regex filters with ReDoS protection.
 
         Parameters
         ----------
@@ -316,18 +404,50 @@ class EntryFilter:
         # Check title regex
         if "title" in self._compiled_regex:
             pattern = self._compiled_regex["title"]
-            if pattern is not None and not pattern.search(entry.title):
-                logger.debug("Entry rejected: title doesn't match regex")
-                return False
+            if pattern is not None:
+                if not self._safe_regex_search(pattern, entry.title, "title"):
+                    logger.debug("Entry rejected: title doesn't match regex")
+                    return False
 
         # Check content regex
         if "content" in self._compiled_regex:
             pattern = self._compiled_regex["content"]
-            if pattern is not None and not pattern.search(entry.content):
-                logger.debug("Entry rejected: content doesn't match regex")
-                return False
+            if pattern is not None:
+                if not self._safe_regex_search(pattern, entry.content, "content"):
+                    logger.debug("Entry rejected: content doesn't match regex")
+                    return False
 
         return True
+
+    def _safe_regex_search(
+        self, pattern: re.Pattern, text: str, field_name: str
+    ) -> bool:
+        """
+        Safely execute a regex search with timeout protection.
+
+        Parameters
+        ----------
+        pattern : re.Pattern
+            The compiled regex pattern.
+        text : str
+            The text to search.
+        field_name : str
+            Name of the field for logging.
+
+        Returns
+        -------
+        bool
+            True if the pattern matches, False otherwise or on timeout.
+        """
+        try:
+            with regex_timeout(REGEX_TIMEOUT_SECONDS):
+                return pattern.search(text) is not None
+        except RegexTimeoutError:
+            logger.warning(
+                "Regex match timed out for '%s' field, treating as non-match",
+                field_name,
+            )
+            return False
 
 
 def filter_entries(entries: list[RSSEntry], filters: FeedFilters) -> list[RSSEntry]:

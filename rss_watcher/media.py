@@ -6,6 +6,7 @@ Handles extraction and downloading of video files from RSS entry content.
 
 import logging
 import re
+import ssl
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -16,6 +17,9 @@ from aiohttp_socks import ProxyConnector
 from rss_watcher.filters import RSSEntry
 
 logger = logging.getLogger(__name__)
+
+# Allowed URL schemes for media downloads (SSRF protection)
+ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
 
 # Video MIME types to match in enclosures
 VIDEO_MIME_TYPES = frozenset(
@@ -43,6 +47,36 @@ SOURCE_SRC_PATTERN = re.compile(
 )
 
 
+def redact_proxy_url(proxy_url: str) -> str:
+    """
+    Redact credentials from a proxy URL for safe logging.
+
+    Parameters
+    ----------
+    proxy_url : str
+        The proxy URL potentially containing credentials.
+
+    Returns
+    -------
+    str
+        The proxy URL with password redacted.
+    """
+    try:
+        parsed = urlparse(proxy_url)
+        if parsed.password:
+            # Reconstruct URL with redacted password
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            if parsed.username:
+                netloc = f"{parsed.username}:****@{netloc}"
+            return f"{parsed.scheme}://{netloc}{parsed.path}"
+        return proxy_url
+    except Exception:
+        # Fallback: return a generic message if parsing fails
+        return "<proxy url>"
+
+
 class MediaDownloader:
     """
     Downloads media files (videos) from RSS entries.
@@ -56,6 +90,7 @@ class MediaDownloader:
         proxy_url: str | None = None,
         timeout: int = 300,
         user_agent: str = "RSS-Watcher/1.0",
+        max_download_size: int | None = None,
     ):
         """
         Initialize the media downloader.
@@ -68,10 +103,13 @@ class MediaDownloader:
             HTTP request timeout in seconds for downloads.
         user_agent : str
             User-Agent header for HTTP requests.
+        max_download_size : int | None
+            Maximum file size in bytes to download. None means no limit.
         """
         self.proxy_url = proxy_url
         self.timeout = timeout
         self.user_agent = user_agent
+        self.max_download_size = max_download_size
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -80,15 +118,78 @@ class MediaDownloader:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             headers = {"User-Agent": self.user_agent}
 
+            # Create explicit SSL context for secure connections
+            ssl_context = ssl.create_default_context()
+
             connector = None
             if self.proxy_url:
-                connector = ProxyConnector.from_url(self.proxy_url)
-                logger.debug("Media downloader using proxy: %s", self.proxy_url.split("@")[-1])
+                connector = ProxyConnector.from_url(self.proxy_url, ssl=ssl_context)
+                logger.debug(
+                    "Media downloader using proxy: %s", redact_proxy_url(self.proxy_url)
+                )
+            else:
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
 
             self._session = aiohttp.ClientSession(
                 timeout=timeout, headers=headers, connector=connector
             )
         return self._session
+
+    def _validate_url(self, url: str) -> bool:
+        """
+        Validate that a URL is safe to fetch (SSRF protection).
+
+        Parameters
+        ----------
+        url : str
+            The URL to validate.
+
+        Returns
+        -------
+        bool
+            True if the URL is safe to fetch, False otherwise.
+        """
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme.lower() not in ALLOWED_URL_SCHEMES:
+                logger.warning(
+                    "Blocked URL with disallowed scheme '%s': %s",
+                    parsed.scheme,
+                    url[:100],
+                )
+                return False
+            if not parsed.netloc:
+                logger.warning("Blocked URL without host: %s", url[:100])
+                return False
+            return True
+        except Exception as e:
+            logger.warning("Failed to parse URL '%s': %s", url[:100], e)
+            return False
+
+    def _validate_path_within_base(self, base_dir: Path, target_path: Path) -> bool:
+        """
+        Validate that target_path stays within base_dir (path traversal protection).
+
+        Parameters
+        ----------
+        base_dir : Path
+            The base directory that should contain the target.
+        target_path : Path
+            The path to validate.
+
+        Returns
+        -------
+        bool
+            True if target_path is within base_dir, False otherwise.
+        """
+        try:
+            resolved_base = base_dir.resolve()
+            resolved_target = target_path.resolve()
+            # Check if target is relative to base (i.e., contained within it)
+            resolved_target.relative_to(resolved_base)
+            return True
+        except ValueError:
+            return False
 
     def extract_video_urls_from_html(self, html_content: str) -> list[str]:
         """
@@ -253,11 +354,26 @@ class MediaDownloader:
         Path | None
             Path to the downloaded file, or None if download failed.
         """
+        # SSRF protection: validate URL scheme
+        if not self._validate_url(url):
+            return None
+
         session = await self._get_session()
 
         # Create feed-specific directory
+        base_media_dir = Path(media_dir).resolve()
         safe_feed_name = self._sanitize_feed_name(feed_name)
-        feed_dir = Path(media_dir) / safe_feed_name
+        feed_dir = base_media_dir / safe_feed_name
+
+        # Path traversal protection: validate feed_dir stays within media_dir
+        if not self._validate_path_within_base(base_media_dir, feed_dir):
+            logger.error(
+                "Path traversal attempt detected: feed_dir '%s' escapes media_dir '%s'",
+                feed_dir,
+                base_media_dir,
+            )
+            return None
+
         feed_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate timestamped filename
@@ -267,11 +383,36 @@ class MediaDownloader:
         final_filename = f"{timestamp}_{safe_filename}"
         file_path = feed_dir / final_filename
 
+        # Path traversal protection: validate file_path stays within feed_dir
+        if not self._validate_path_within_base(feed_dir, file_path):
+            logger.error(
+                "Path traversal attempt detected: file '%s' escapes feed_dir '%s'",
+                file_path,
+                feed_dir,
+            )
+            return None
+
         try:
             logger.debug("Downloading video from %s", url)
 
             async with session.get(url) as response:
                 response.raise_for_status()
+
+                # Check Content-Length for size limit enforcement
+                content_length = response.headers.get("Content-Length")
+                if content_length and self.max_download_size:
+                    try:
+                        size = int(content_length)
+                        if size > self.max_download_size:
+                            logger.warning(
+                                "File too large (%d bytes > %d max): %s",
+                                size,
+                                self.max_download_size,
+                                url,
+                            )
+                            return None
+                    except ValueError:
+                        pass  # Invalid Content-Length, proceed with streaming check
 
                 # Check if response is actually a video (optional content-type check)
                 content_type = response.headers.get("Content-Type", "").lower()
@@ -286,9 +427,25 @@ class MediaDownloader:
                         url,
                     )
 
-                # Stream download to file
+                # Stream download to file with size limit check
+                downloaded_bytes = 0
                 with open(file_path, "wb") as f:
                     async for chunk in response.content.iter_chunked(8192):
+                        downloaded_bytes += len(chunk)
+                        if (
+                            self.max_download_size
+                            and downloaded_bytes > self.max_download_size
+                        ):
+                            logger.warning(
+                                "Download exceeded size limit (%d > %d bytes): %s",
+                                downloaded_bytes,
+                                self.max_download_size,
+                                url,
+                            )
+                            f.close()
+                            if file_path.exists():
+                                file_path.unlink()
+                            return None
                         f.write(chunk)
 
             file_size = file_path.stat().st_size

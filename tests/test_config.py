@@ -128,6 +128,52 @@ class TestFeedConfig:
         assert feed.media_all_entries is None
         assert isinstance(feed.filters, FeedFilters)
 
+    def test_http_url_allowed(self) -> None:
+        """Test that http:// URLs are allowed."""
+        feed = FeedConfig(name="HTTP Feed", url="http://example.com/feed.xml")
+        assert feed.url == "http://example.com/feed.xml"
+
+    def test_https_url_allowed(self) -> None:
+        """Test that https:// URLs are allowed."""
+        feed = FeedConfig(name="HTTPS Feed", url="https://example.com/feed.xml")
+        assert feed.url == "https://example.com/feed.xml"
+
+    def test_file_url_rejected(self) -> None:
+        """Test that file:// URLs are rejected (SSRF protection)."""
+        with pytest.raises(ValidationError) as exc_info:
+            FeedConfig(name="File Feed", url="file:///etc/passwd")
+        assert "http" in str(exc_info.value).lower() or "scheme" in str(exc_info.value).lower()
+
+    def test_ftp_url_rejected(self) -> None:
+        """Test that ftp:// URLs are rejected (SSRF protection)."""
+        with pytest.raises(ValidationError) as exc_info:
+            FeedConfig(name="FTP Feed", url="ftp://example.com/feed.xml")
+        assert "http" in str(exc_info.value).lower() or "scheme" in str(exc_info.value).lower()
+
+    def test_gopher_url_rejected(self) -> None:
+        """Test that gopher:// URLs are rejected (SSRF protection)."""
+        with pytest.raises(ValidationError) as exc_info:
+            FeedConfig(name="Gopher Feed", url="gopher://example.com/")
+        assert "http" in str(exc_info.value).lower() or "scheme" in str(exc_info.value).lower()
+
+    def test_empty_url_rejected(self) -> None:
+        """Test that empty URLs are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            FeedConfig(name="Empty URL Feed", url="")
+        assert "empty" in str(exc_info.value).lower()
+
+    def test_url_without_host_rejected(self) -> None:
+        """Test that URLs without host are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            FeedConfig(name="No Host Feed", url="http:///path")
+        assert "host" in str(exc_info.value).lower()
+
+    def test_relative_url_rejected(self) -> None:
+        """Test that relative URLs (no scheme) are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            FeedConfig(name="Relative Feed", url="/path/to/feed.xml")
+        assert "scheme" in str(exc_info.value).lower() or "http" in str(exc_info.value).lower()
+
     def test_full_feed(self) -> None:
         """Test FeedConfig with all fields specified."""
         feed = FeedConfig(
@@ -238,6 +284,8 @@ class TestDefaultsConfig:
         assert config.proxy is None
         assert config.media_dir is None
         assert config.media_all_entries is False
+        assert config.user_agent == "RSS-Watcher/1.0"
+        assert config.max_download_size is None
 
     def test_custom_values(self) -> None:
         """Test DefaultsConfig with custom values."""
@@ -248,6 +296,8 @@ class TestDefaultsConfig:
             proxy="socks5://localhost:1080",
             media_dir="/data/media",
             media_all_entries=True,
+            user_agent="Custom-Agent/2.0",
+            max_download_size=100 * 1024 * 1024,  # 100 MB
         )
 
         assert config.check_interval == 600
@@ -256,6 +306,8 @@ class TestDefaultsConfig:
         assert config.proxy == "socks5://localhost:1080"
         assert config.media_dir == "/data/media"
         assert config.media_all_entries is True
+        assert config.user_agent == "Custom-Agent/2.0"
+        assert config.max_download_size == 100 * 1024 * 1024
 
 
 class TestStorageConfig:
