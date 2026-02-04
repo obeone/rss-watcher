@@ -10,6 +10,7 @@ import logging
 import signal
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import coloredlogs
 
@@ -21,6 +22,36 @@ from rss_watcher.storage import Storage
 from rss_watcher.telegram import TelegramNotifier
 
 logger = logging.getLogger(__name__)
+
+
+def redact_proxy_url(proxy_url: str) -> str:
+    """
+    Redact credentials from a proxy URL for safe logging.
+
+    Parameters
+    ----------
+    proxy_url : str
+        The proxy URL potentially containing credentials.
+
+    Returns
+    -------
+    str
+        The proxy URL with password redacted.
+    """
+    try:
+        parsed = urlparse(proxy_url)
+        if parsed.password:
+            # Reconstruct URL with redacted password
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            if parsed.username:
+                netloc = f"{parsed.username}:****@{netloc}"
+            return f"{parsed.scheme}://{netloc}{parsed.path}"
+        return proxy_url
+    except Exception:
+        # Fallback: return a generic message if parsing fails
+        return "<proxy url>"
 
 
 class RSSWatcher:
@@ -57,11 +88,12 @@ class RSSWatcher:
 
         proxy_url = self.config.defaults.proxy
         if proxy_url:
-            logger.info("Using proxy: %s", proxy_url.split("@")[-1])
+            logger.info("Using proxy: %s", redact_proxy_url(proxy_url))
 
         self.parser = FeedParser(
             timeout=self.config.defaults.request_timeout,
             max_retries=self.config.defaults.max_retries,
+            user_agent=self.config.defaults.user_agent,
             proxy_url=proxy_url,
         )
 
@@ -71,6 +103,8 @@ class RSSWatcher:
         self.media_downloader = MediaDownloader(
             proxy_url=proxy_url,
             timeout=self.config.defaults.request_timeout,
+            user_agent=self.config.defaults.user_agent,
+            max_download_size=self.config.defaults.max_download_size,
         )
 
         # Test Telegram connection

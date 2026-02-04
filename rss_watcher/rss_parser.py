@@ -8,7 +8,9 @@ with async HTTP requests.
 import html
 import logging
 import re
+import ssl
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 import feedparser
@@ -18,6 +20,36 @@ from rss_watcher.config import FeedConfig
 from rss_watcher.filters import RSSEntry
 
 logger = logging.getLogger(__name__)
+
+
+def redact_proxy_url(proxy_url: str) -> str:
+    """
+    Redact credentials from a proxy URL for safe logging.
+
+    Parameters
+    ----------
+    proxy_url : str
+        The proxy URL potentially containing credentials.
+
+    Returns
+    -------
+    str
+        The proxy URL with password redacted.
+    """
+    try:
+        parsed = urlparse(proxy_url)
+        if parsed.password:
+            # Reconstruct URL with redacted password
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            if parsed.username:
+                netloc = f"{parsed.username}:****@{netloc}"
+            return f"{parsed.scheme}://{netloc}{parsed.path}"
+        return proxy_url
+    except Exception:
+        # Fallback: return a generic message if parsing fails
+        return "<proxy url>"
 
 # Pattern to match HTML entities, excluding XML's five predefined entities
 # XML predefined: &lt; &gt; &amp; &quot; &apos;
@@ -92,10 +124,15 @@ class FeedParser:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             headers = {"User-Agent": self.user_agent}
 
+            # Create explicit SSL context for secure connections
+            ssl_context = ssl.create_default_context()
+
             connector = None
             if self.proxy_url:
-                connector = ProxyConnector.from_url(self.proxy_url)
-                logger.debug("Using proxy: %s", self.proxy_url.split("@")[-1])
+                connector = ProxyConnector.from_url(self.proxy_url, ssl=ssl_context)
+                logger.debug("Using proxy: %s", redact_proxy_url(self.proxy_url))
+            else:
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
 
             self._session = aiohttp.ClientSession(
                 timeout=timeout, headers=headers, connector=connector

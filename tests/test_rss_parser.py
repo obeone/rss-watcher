@@ -298,7 +298,7 @@ class TestFeedParserProxy:
     """Tests for proxy configuration."""
 
     async def test_proxy_creates_connector(self) -> None:
-        """Test that proxy URL creates a ProxyConnector."""
+        """Test that proxy URL creates a ProxyConnector with SSL context."""
         parser = FeedParser(proxy_url="socks5://localhost:1080")
 
         with patch("rss_watcher.rss_parser.ProxyConnector") as mock_connector:
@@ -306,7 +306,12 @@ class TestFeedParserProxy:
 
             await parser._get_session()
 
-            mock_connector.from_url.assert_called_once_with("socks5://localhost:1080")
+            # Verify ProxyConnector.from_url was called with proxy URL and SSL context
+            mock_connector.from_url.assert_called_once()
+            call_args = mock_connector.from_url.call_args
+            assert call_args[0][0] == "socks5://localhost:1080"
+            # SSL context should be passed as keyword argument
+            assert "ssl" in call_args[1]
 
         await parser.close()
 

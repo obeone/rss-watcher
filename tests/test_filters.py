@@ -10,7 +10,12 @@ from typing import Any
 import pytest
 
 from rss_watcher.config import FeedFilters, KeywordFilter, RegexFilter
-from rss_watcher.filters import EntryFilter, RSSEntry, filter_entries
+from rss_watcher.filters import (
+    EntryFilter,
+    RSSEntry,
+    filter_entries,
+    MAX_REGEX_PATTERN_LENGTH,
+)
 
 
 class TestRSSEntry:
@@ -490,3 +495,62 @@ class TestFilterEntries:
         result = filter_entries(entries, filters)
 
         assert [e.guid for e in result] == ["1", "3", "4"]
+
+
+class TestReDoSProtection:
+    """Tests for ReDoS (regex denial of service) protection."""
+
+    def test_max_pattern_length_enforced(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that regex patterns exceeding max length are rejected."""
+        long_pattern = "a" * (MAX_REGEX_PATTERN_LENGTH + 100)
+        filters = FeedFilters(regex=RegexFilter(title=long_pattern))
+        entry_filter = EntryFilter(filters)
+        entry = RSSEntry(title="test")
+
+        # Pattern should be rejected during compilation
+        assert "exceeds max length" in caplog.text
+        # Entry should pass since invalid regex is skipped
+        assert entry_filter.matches(entry) is True
+
+    def test_valid_length_pattern_accepted(self) -> None:
+        """Test that regex patterns within length limit work."""
+        valid_pattern = r"test.*pattern"
+        filters = FeedFilters(regex=RegexFilter(title=valid_pattern))
+        entry_filter = EntryFilter(filters)
+
+        assert entry_filter.matches(RSSEntry(title="test some pattern")) is True
+        assert entry_filter.matches(RSSEntry(title="no match here")) is False
+
+    def test_catastrophic_backtracking_pattern(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that potentially dangerous regex patterns are handled.
+
+        Note: This test may behave differently on Windows (no SIGALRM).
+        The pattern is designed to cause catastrophic backtracking on certain inputs.
+        """
+        # A pattern known to cause catastrophic backtracking
+        # This should either timeout or work but not hang indefinitely
+        filters = FeedFilters(regex=RegexFilter(title=r"(a+)+$"))
+        entry_filter = EntryFilter(filters)
+
+        # Short input should work fine
+        assert entry_filter.matches(RSSEntry(title="aaa")) is True
+
+        # Longer input with non-matching ending might cause issues
+        # but should be protected by timeout
+        entry = RSSEntry(title="a" * 20 + "!")
+        # Should not hang - either matches, doesn't match, or times out
+        result = entry_filter.matches(entry)
+        # Result doesn't matter, just verify it completes
+        assert isinstance(result, bool)
+
+    def test_content_regex_length_enforced(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that content regex patterns also have length limit."""
+        long_pattern = "b" * (MAX_REGEX_PATTERN_LENGTH + 50)
+        filters = FeedFilters(regex=RegexFilter(content=long_pattern))
+        entry_filter = EntryFilter(filters)
+
+        assert "exceeds max length" in caplog.text
+        # Entry passes since regex was rejected
+        assert entry_filter.matches(RSSEntry(content="test")) is True

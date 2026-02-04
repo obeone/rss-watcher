@@ -8,6 +8,7 @@ import asyncio
 import html
 import logging
 import re
+from urllib.parse import urlparse
 
 from telegram import Bot
 from telegram.constants import ParseMode
@@ -18,6 +19,36 @@ from rss_watcher.config import TelegramConfig
 from rss_watcher.filters import RSSEntry
 
 logger = logging.getLogger(__name__)
+
+
+def redact_proxy_url(proxy_url: str) -> str:
+    """
+    Redact credentials from a proxy URL for safe logging.
+
+    Parameters
+    ----------
+    proxy_url : str
+        The proxy URL potentially containing credentials.
+
+    Returns
+    -------
+    str
+        The proxy URL with password redacted.
+    """
+    try:
+        parsed = urlparse(proxy_url)
+        if parsed.password:
+            # Reconstruct URL with redacted password
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            if parsed.username:
+                netloc = f"{parsed.username}:****@{netloc}"
+            return f"{parsed.scheme}://{netloc}{parsed.path}"
+        return proxy_url
+    except Exception:
+        # Fallback: return a generic message if parsing fails
+        return "<proxy url>"
 
 # Maximum message length for Telegram
 MAX_MESSAGE_LENGTH = 4096
@@ -48,7 +79,7 @@ class TelegramNotifier:
         request = None
         if proxy_url:
             request = HTTPXRequest(proxy=proxy_url)
-            logger.debug("Telegram using proxy: %s", proxy_url.split("@")[-1])
+            logger.debug("Telegram using proxy: %s", redact_proxy_url(proxy_url))
 
         self._bot = Bot(token=config.bot_token, request=request)
         self._rate_limit_delay = 0.5  # Seconds between messages
