@@ -18,6 +18,7 @@ from rss_watcher.config import (
     FeedFilters,
     KeywordFilter,
     RegexFilter,
+    SimpleXConfig,
     TelegramConfig,
 )
 from rss_watcher.filters import RSSEntry
@@ -195,6 +196,15 @@ def minimal_telegram_config() -> TelegramConfig:
     return TelegramConfig(
         bot_token="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz",
         chat_id="-1001234567890",
+    )
+
+
+@pytest.fixture
+def minimal_simplex_config() -> SimpleXConfig:
+    """Create a minimal valid SimpleX configuration."""
+    return SimpleXConfig(
+        websocket_url="ws://localhost:5225",
+        contact="test-contact",
     )
 
 

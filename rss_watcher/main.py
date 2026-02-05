@@ -16,7 +16,9 @@ import coloredlogs
 from rss_watcher.config import FeedConfig, load_config
 from rss_watcher.filters import RSSEntry, filter_entries
 from rss_watcher.media import MediaDownloader
+from rss_watcher.notifier import Notifier
 from rss_watcher.rss_parser import FeedParser
+from rss_watcher.simplex import SimpleXNotifier
 from rss_watcher.storage import Storage
 from rss_watcher.telegram import TelegramNotifier
 
@@ -42,7 +44,7 @@ class RSSWatcher:
         self.config = load_config(config_path)
         self.storage: Storage | None = None
         self.parser: FeedParser | None = None
-        self.notifier: TelegramNotifier | None = None
+        self.notifiers: list[Notifier] = []
         self.media_downloader: MediaDownloader | None = None
         self._running = False
         self._tasks: list[asyncio.Task] = []
@@ -65,7 +67,20 @@ class RSSWatcher:
             proxy_url=proxy_url,
         )
 
-        self.notifier = TelegramNotifier(self.config.telegram, proxy_url=proxy_url)
+        # Initialize configured notifiers
+        self.notifiers = []
+
+        if self.config.telegram:
+            telegram_notifier = TelegramNotifier(
+                self.config.telegram, proxy_url=proxy_url
+            )
+            self.notifiers.append(telegram_notifier)
+            logger.info("Telegram notifier configured")
+
+        if self.config.simplex:
+            simplex_notifier = SimpleXNotifier(self.config.simplex)
+            self.notifiers.append(simplex_notifier)
+            logger.info("SimpleX notifier configured")
 
         # Initialize media downloader (used if any feed has media_dir configured)
         self.media_downloader = MediaDownloader(
@@ -73,11 +88,26 @@ class RSSWatcher:
             timeout=self.config.defaults.request_timeout,
         )
 
-        # Test Telegram connection
-        if not await self.notifier.test_connection():
-            logger.error("Failed to connect to Telegram, exiting")
+        # Test all notifier connections
+        failed_notifiers = []
+        for notifier in self.notifiers:
+            if not await notifier.test_connection():
+                notifier_name = type(notifier).__name__
+                logger.error("Failed to connect to %s", notifier_name)
+                failed_notifiers.append(notifier_name)
+
+        # Exit if all notifiers failed
+        if failed_notifiers and len(failed_notifiers) == len(self.notifiers):
+            logger.error("All notifiers failed to connect, exiting")
             await self.stop()
             sys.exit(1)
+
+        # Warn if some notifiers failed but continue with working ones
+        if failed_notifiers:
+            logger.warning(
+                "Some notifiers failed: %s. Continuing with working notifiers.",
+                ", ".join(failed_notifiers),
+            )
 
         self._running = True
 
@@ -114,8 +144,8 @@ class RSSWatcher:
             await self.parser.close()
         if self.storage:
             await self.storage.close()
-        if self.notifier:
-            await self.notifier.close()
+        for notifier in self.notifiers:
+            await notifier.close()
         if self.media_downloader:
             await self.media_downloader.close()
 
@@ -155,7 +185,7 @@ class RSSWatcher:
         feed : FeedConfig
             Configuration for the feed to check.
         """
-        if not self.parser or not self.storage or not self.notifier:
+        if not self.parser or not self.storage or not self.notifiers:
             raise RuntimeError("Components not initialized")
 
         logger.debug("Checking feed: %s", feed.name)
@@ -254,17 +284,29 @@ class RSSWatcher:
                         e,
                     )
 
-            try:
-                success = await self.notifier.send_entry(entry)
-                if success:
-                    await self.storage.mark_seen(
-                        entry.guid,
-                        feed.name,
-                        entry.title,
-                        entry.link,
+            # Send to all notifiers, mark as seen if at least one succeeds
+            any_success = False
+            for notifier in self.notifiers:
+                try:
+                    success = await notifier.send_entry(entry)
+                    if success:
+                        any_success = True
+                except Exception as e:
+                    notifier_name = type(notifier).__name__
+                    logger.error(
+                        "Failed to notify via %s for entry '%s': %s",
+                        notifier_name,
+                        entry.title[:50],
+                        e,
                     )
-            except Exception as e:
-                logger.error("Failed to notify for entry '%s': %s", entry.title[:50], e)
+
+            if any_success:
+                await self.storage.mark_seen(
+                    entry.guid,
+                    feed.name,
+                    entry.title,
+                    entry.link,
+                )
 
 
 def setup_logging(verbose: bool = False) -> None:
