@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,40 @@ class TelegramConfig(BaseModel):
         return v
 
 
+class SimpleXConfig(BaseModel):
+    """
+    SimpleX Chat notification configuration.
+
+    Requires the simplex-chat CLI to be running externally with WebSocket
+    server enabled (e.g., simplex-chat -p 5225).
+
+    Attributes
+    ----------
+    websocket_url : str
+        WebSocket URL for the simplex-chat CLI server.
+    contact : str
+        Name of the SimpleX contact to send messages to.
+        Must be a pre-established contact in the simplex-chat client.
+    connect_timeout : int
+        Timeout in seconds for establishing WebSocket connection.
+    message_timeout : int
+        Timeout in seconds for waiting for message acknowledgment.
+    """
+
+    websocket_url: str = "ws://localhost:5225"
+    contact: str
+    connect_timeout: int = 10
+    message_timeout: int = 30
+
+    @field_validator("contact")
+    @classmethod
+    def check_contact_not_empty(cls, v: str) -> str:
+        """Validate that contact name is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Contact name cannot be empty")
+        return v
+
+
 class DefaultsConfig(BaseModel):
     """
     Default settings for all feeds.
@@ -185,8 +219,10 @@ class AppConfig(BaseModel):
 
     Attributes
     ----------
-    telegram : TelegramConfig
-        Telegram bot settings.
+    telegram : TelegramConfig | None
+        Telegram bot settings (optional if simplex is configured).
+    simplex : SimpleXConfig | None
+        SimpleX Chat settings (optional if telegram is configured).
     defaults : DefaultsConfig
         Default settings for feeds.
     storage : StorageConfig
@@ -195,7 +231,8 @@ class AppConfig(BaseModel):
         List of RSS feeds to monitor.
     """
 
-    telegram: TelegramConfig
+    telegram: TelegramConfig | None = None
+    simplex: SimpleXConfig | None = None
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     feeds: list[FeedConfig] = Field(default_factory=list)
@@ -207,6 +244,15 @@ class AppConfig(BaseModel):
         if not v:
             raise ValueError("At least one feed must be configured")
         return v
+
+    @model_validator(mode="after")
+    def check_at_least_one_notifier(self) -> "AppConfig":
+        """Validate that at least one notifier is configured."""
+        if self.telegram is None and self.simplex is None:
+            raise ValueError(
+                "At least one notifier must be configured (telegram or simplex)"
+            )
+        return self
 
 
 def _substitute_env_vars(value: Any) -> Any:

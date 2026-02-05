@@ -45,7 +45,7 @@ class TestRSSWatcherInit:
 
         assert watcher.storage is None
         assert watcher.parser is None
-        assert watcher.notifier is None
+        assert watcher.notifiers == []
         assert watcher.media_downloader is None
         assert watcher._running is False
         assert watcher._tasks == []
@@ -70,8 +70,10 @@ class TestRSSWatcherCheckFeed:
         watcher.parser = MagicMock()
         watcher.parser.fetch_feed = AsyncMock(return_value=[])
 
-        watcher.notifier = MagicMock()
-        watcher.notifier.send_entry = AsyncMock(return_value=True)
+        # Create a mock notifier and add to list
+        mock_notifier = MagicMock()
+        mock_notifier.send_entry = AsyncMock(return_value=True)
+        watcher.notifiers = [mock_notifier]
 
         watcher.media_downloader = MagicMock()
         watcher.media_downloader.process_entry = AsyncMock(return_value=[])
@@ -98,7 +100,7 @@ class TestRSSWatcherCheckFeed:
         # Should mark feed as initialized
         mock_watcher.storage.mark_feed_initialized.assert_called_once()
         # Should NOT send notifications
-        mock_watcher.notifier.send_entry.assert_not_called()
+        mock_watcher.notifiers[0].send_entry.assert_not_called()
 
     async def test_check_feed_filters_applied(
         self, mock_watcher: RSSWatcher
@@ -119,7 +121,7 @@ class TestRSSWatcherCheckFeed:
         await mock_watcher._check_feed(feed_config)
 
         # Should only notify for the Python entry
-        assert mock_watcher.notifier.send_entry.call_count <= 1
+        assert mock_watcher.notifiers[0].send_entry.call_count <= 1
 
     async def test_check_feed_marks_seen_after_notification(
         self, mock_watcher: RSSWatcher
@@ -127,7 +129,7 @@ class TestRSSWatcherCheckFeed:
         """Test entries are marked seen only after successful notification."""
         mock_watcher.storage.is_feed_initialized = AsyncMock(return_value=True)
         mock_watcher.storage.is_seen = AsyncMock(return_value=False)
-        mock_watcher.notifier.send_entry = AsyncMock(return_value=True)
+        mock_watcher.notifiers[0].send_entry = AsyncMock(return_value=True)
 
         # Entry must match ALL filters (AND logic):
         # - keywords: "python" or "programming" (OR)
@@ -155,7 +157,7 @@ class TestRSSWatcherCheckFeed:
         """Test entries are not marked seen if notification fails."""
         mock_watcher.storage.is_feed_initialized = AsyncMock(return_value=True)
         mock_watcher.storage.is_seen = AsyncMock(return_value=False)
-        mock_watcher.notifier.send_entry = AsyncMock(return_value=False)
+        mock_watcher.notifiers[0].send_entry = AsyncMock(return_value=False)
 
         entries = [RSSEntry(guid="1", title="Python Entry", content="Python")]
         mock_watcher.parser.fetch_feed = AsyncMock(return_value=entries)
@@ -193,7 +195,7 @@ class TestRSSWatcherCheckFeed:
         await mock_watcher._check_feed(feed_config)
 
         # Should not call notification or storage
-        mock_watcher.notifier.send_entry.assert_not_called()
+        mock_watcher.notifiers[0].send_entry.assert_not_called()
         mock_watcher.storage.mark_seen.assert_not_called()
 
     async def test_check_feed_all_seen(
@@ -213,7 +215,7 @@ class TestRSSWatcherCheckFeed:
         await mock_watcher._check_feed(feed_config)
 
         # Should not send notifications for seen entries
-        mock_watcher.notifier.send_entry.assert_not_called()
+        mock_watcher.notifiers[0].send_entry.assert_not_called()
 
 
 class TestRSSWatcherLifecycle:
@@ -276,8 +278,10 @@ class TestRSSWatcherLifecycle:
         watcher.parser = MagicMock()
         watcher.parser.close = AsyncMock()
 
-        watcher.notifier = MagicMock()
-        watcher.notifier.close = AsyncMock()
+        # Mock notifiers as a list
+        mock_notifier = MagicMock()
+        mock_notifier.close = AsyncMock()
+        watcher.notifiers = [mock_notifier]
 
         watcher.media_downloader = MagicMock()
         watcher.media_downloader.close = AsyncMock()
@@ -288,7 +292,7 @@ class TestRSSWatcherLifecycle:
 
         watcher.storage.close.assert_called_once()
         watcher.parser.close.assert_called_once()
-        watcher.notifier.close.assert_called_once()
+        mock_notifier.close.assert_called_once()
         watcher.media_downloader.close.assert_called_once()
         assert watcher._running is False
 
@@ -330,7 +334,7 @@ class TestWatchFeed:
         watcher._running = True
         watcher.storage = MagicMock()
         watcher.parser = MagicMock()
-        watcher.notifier = MagicMock()
+        watcher.notifiers = [MagicMock()]
         watcher.media_downloader = MagicMock()
 
         call_count = 0
@@ -359,7 +363,7 @@ class TestWatchFeed:
         watcher._running = True
         watcher.storage = MagicMock()
         watcher.parser = MagicMock()
-        watcher.notifier = MagicMock()
+        watcher.notifiers = [MagicMock()]
         watcher.media_downloader = MagicMock()
 
         call_count = 0
@@ -391,7 +395,7 @@ class TestWatchFeed:
         watcher._running = True
         watcher.storage = MagicMock()
         watcher.parser = MagicMock()
-        watcher.notifier = MagicMock()
+        watcher.notifiers = [MagicMock()]
         watcher.media_downloader = MagicMock()
 
         async def mock_check_feed(feed):
