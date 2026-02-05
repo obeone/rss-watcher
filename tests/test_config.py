@@ -19,6 +19,7 @@ from rss_watcher.config import (
     FeedFilters,
     KeywordFilter,
     RegexFilter,
+    SimpleXConfig,
     StorageConfig,
     TelegramConfig,
     _substitute_env_vars,
@@ -271,6 +272,60 @@ class TestTelegramConfig:
         assert config.disable_web_page_preview is True
 
 
+class TestSimpleXConfig:
+    """Tests for SimpleXConfig Pydantic model."""
+
+    def test_valid_config(self) -> None:
+        """Test SimpleXConfig with valid values."""
+        config = SimpleXConfig(
+            websocket_url="ws://localhost:5225",
+            contact="my-contact",
+        )
+
+        assert config.websocket_url == "ws://localhost:5225"
+        assert config.contact == "my-contact"
+        assert config.connect_timeout == 10
+        assert config.message_timeout == 30
+
+    def test_default_websocket_url(self) -> None:
+        """Test SimpleXConfig uses default WebSocket URL."""
+        config = SimpleXConfig(contact="test")
+
+        assert config.websocket_url == "ws://localhost:5225"
+
+    def test_empty_contact_raises(self) -> None:
+        """Test that empty contact raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            SimpleXConfig(
+                websocket_url="ws://localhost:5225",
+                contact="",
+            )
+
+        assert "Contact name cannot be empty" in str(exc_info.value)
+
+    def test_whitespace_contact_raises(self) -> None:
+        """Test that whitespace-only contact raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            SimpleXConfig(
+                websocket_url="ws://localhost:5225",
+                contact="   ",
+            )
+
+        assert "Contact name cannot be empty" in str(exc_info.value)
+
+    def test_custom_timeouts(self) -> None:
+        """Test SimpleXConfig with custom timeout values."""
+        config = SimpleXConfig(
+            websocket_url="ws://localhost:5225",
+            contact="test",
+            connect_timeout=60,
+            message_timeout=120,
+        )
+
+        assert config.connect_timeout == 60
+        assert config.message_timeout == 120
+
+
 class TestDefaultsConfig:
     """Tests for DefaultsConfig Pydantic model."""
 
@@ -342,6 +397,17 @@ class TestAppConfig:
 
         assert "At least one feed must be configured" in str(exc_info.value)
 
+    def test_no_notifier_raises(self, minimal_feed_config: FeedConfig) -> None:
+        """Test that AppConfig without any notifier raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            AppConfig(
+                telegram=None,
+                simplex=None,
+                feeds=[minimal_feed_config],
+            )
+
+        assert "At least one notifier must be configured" in str(exc_info.value)
+
     def test_minimal_valid(
         self, minimal_telegram_config: TelegramConfig, minimal_feed_config: FeedConfig
     ) -> None:
@@ -352,9 +418,39 @@ class TestAppConfig:
         )
 
         assert config.telegram == minimal_telegram_config
+        assert config.simplex is None
         assert len(config.feeds) == 1
         assert isinstance(config.defaults, DefaultsConfig)
         assert isinstance(config.storage, StorageConfig)
+
+    def test_simplex_only_valid(
+        self, minimal_simplex_config: SimpleXConfig, minimal_feed_config: FeedConfig
+    ) -> None:
+        """Test AppConfig with only SimpleX notifier."""
+        config = AppConfig(
+            simplex=minimal_simplex_config,
+            feeds=[minimal_feed_config],
+        )
+
+        assert config.telegram is None
+        assert config.simplex == minimal_simplex_config
+        assert len(config.feeds) == 1
+
+    def test_both_notifiers_valid(
+        self,
+        minimal_telegram_config: TelegramConfig,
+        minimal_simplex_config: SimpleXConfig,
+        minimal_feed_config: FeedConfig,
+    ) -> None:
+        """Test AppConfig with both notifiers configured."""
+        config = AppConfig(
+            telegram=minimal_telegram_config,
+            simplex=minimal_simplex_config,
+            feeds=[minimal_feed_config],
+        )
+
+        assert config.telegram == minimal_telegram_config
+        assert config.simplex == minimal_simplex_config
 
     def test_full_valid(self, full_config_dict: dict[str, Any]) -> None:
         """Test fully configured AppConfig."""
